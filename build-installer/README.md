@@ -4,11 +4,22 @@
 
 - Private Docker Registry at `$REGISTRY` exists;
 - Registry allows anonymous push or user authenticated with `docker login` before run this build script;
+- Current user has `sudo` privileges;
 
+
+## Run script
 
 ```bash
 bin/build-installer.sh
 ```
+
+or
+
+```bash
+bin/build-installer.sh v1.13.1
+```
+
+## Script output
 
 ```shell
 Building Talos installer image for v1.13.2...
