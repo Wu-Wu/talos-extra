@@ -1,6 +1,10 @@
-# talos-extra
+# Build Talos Linux installer image
 
-# Build Talos Linux image
+## Prerequisites
+
+- Private Docker Registry at `$REGISTRY` exists;
+- Registry allows anonymous push or user authenticated with `docker login` before run this build script;
+
 
 ```bash
 bin/build-installer.sh
