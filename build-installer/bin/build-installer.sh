@@ -2,7 +2,7 @@
 
 # Build a Proxmox VE Talos installer image
 
-TALOS_VERSION=${1:-"v1.13.3"}
+TALOS_VERSION=${1:-"v1.13.4"}
 REGISTRY="cr.v.zyxmasta.net"
 REPOSITORY="talos/pve-iris"
 INSTALLER_FILE="/tmp/out/installer-amd64.tar"
@@ -12,7 +12,7 @@ IMAGE_BASE="ghcr.io/siderolabs/installer-base:${TALOS_VERSION}"
 EXTENSIONS=(
     "--system-extension-image ghcr.io/siderolabs/util-linux-tools:2.41.4"
     "--system-extension-image ghcr.io/siderolabs/iscsi-tools:v0.2.0"
-    "--system-extension-image ghcr.io/siderolabs/qemu-guest-agent:11.0.0"
+    "--system-extension-image ghcr.io/siderolabs/qemu-guest-agent:11.0.1"
     # custom extensions
     # "--system-extension-image ${REGISTRY}/talos/core-utils:9.11.0"
     "--system-extension-image ${REGISTRY}/talos/meminfo-service:v0.1.2"
