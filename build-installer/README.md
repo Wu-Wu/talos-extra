@@ -16,20 +16,20 @@ bin/build-installer.sh
 or
 
 ```bash
-bin/build-installer.sh v1.13.1
+bin/build-installer.sh v1.13.5
 ```
 
 ## Script output
 
 ```shell
-Building Talos installer image for v1.13.2...
+Building Talos installer image for v1.13.5...
 skipped pulling overlay (no overlay)
 profile ready:
 arch: amd64
 platform: nocloud
 secureboot: false
 name: Talos
-version: v1.13.2
+version: v1.13.5
 input:
   kernel:
     path: /usr/install/amd64/vmlinuz
@@ -40,7 +40,7 @@ input:
   sdBoot:
     path: /usr/install/amd64/systemd-boot.efi
   baseInstaller:
-    imageRef: ghcr.io/siderolabs/installer-base:v1.13.2
+    imageRef: ghcr.io/siderolabs/installer-base:v1.13.5
   systemExtensions:
     - imageRef: ghcr.io/siderolabs/util-linux-tools:2.42.0
     - imageRef: ghcr.io/siderolabs/iscsi-tools:v0.2.0
@@ -57,12 +57,12 @@ output asset path: /out/installer-amd64.tar
 Pushing Talos installer image to registry...
 490ea03d7019: Loading layer [==================================================>]  28.35MB/28.35MB
 6cd40686f96f: Loading layer [==================================================>]  111.9MB/111.9MB
-Loaded image: ghcr.io/siderolabs/installer-base:v1.13.2
+Loaded image: ghcr.io/siderolabs/installer-base:v1.13.5
 The push refers to repository [cr.v.zyxmasta.net/talos/pve-iris]
 6cd40686f96f: Pushed
 490ea03d7019: Pushed
 v1.13.2: digest: sha256:f3e719f8e5a912562d662d61aa9a71641b9534bb6a7946fd8ed894c4190a0173 size: 741
-Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.2
+Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.5
 Usage:
-$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.2
+$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.5
 ```

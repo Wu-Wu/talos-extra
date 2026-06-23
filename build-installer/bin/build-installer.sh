@@ -2,7 +2,7 @@
 
 # Build a Proxmox VE Talos installer image
 
-TALOS_VERSION=${1:-"v1.13.4"}
+TALOS_VERSION=${1:-"v1.13.5"}
 REGISTRY="cr.v.zyxmasta.net"
 REPOSITORY="talos/pve-iris"
 INSTALLER_FILE="/tmp/out/installer-amd64.tar"
