@@ -147,10 +147,12 @@ if [ "$PUSH" != "1" ]; then
 fi
 
 echo "Pushing installer image to registry..."
-loaded=$(tar -xOf "$INSTALLER_FILE" manifest.json |
-    python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["RepoTags"][0])')
-echo "Loaded image tag in tar: ${loaded}"
-docker load -i "$INSTALLER_FILE"
+loaded=$(docker load -i "$INSTALLER_FILE" | sed -n 's/^Loaded image: //p')
+if [ -z "$loaded" ]; then
+    echo "ERROR: could not determine the loaded image tag" >&2
+    exit 1
+fi
+echo "Loaded image: ${loaded}"
 docker tag "$loaded" "$IMAGE_NAME"
 
 docker push "$IMAGE_NAME"
