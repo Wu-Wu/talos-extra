@@ -15,7 +15,7 @@ EXTENSIONS=(
     "--system-extension-image ghcr.io/siderolabs/qemu-guest-agent:11.0.2"
     # custom extensions
     # "--system-extension-image ${REGISTRY}/talos/core-utils:9.11.0"
-    "--system-extension-image ${REGISTRY}/talos/meminfo-service:v0.1.2"
+    "--system-extension-image ${REGISTRY}/talos/meminfo-service:v0.1.4"
 )
 
 echo "Building installer image for ${TALOS_VERSION}..."
