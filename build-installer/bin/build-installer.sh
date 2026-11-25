@@ -57,6 +57,11 @@ docker run --rm -t -v "${OUT_DIR}:/out" \
     "${imager_args[@]}"
 
 if [ -e "$INSTALLER_FILE" ]; then
+    if docker manifest inspect "$IMAGE_NAME" >/dev/null 2>&1 && [ "${FORCE:-0}" != "1" ]; then
+        echo "ERROR: ${IMAGE_NAME} already exists in ${REGISTRY}." >&2
+        echo "       Bump the version or re-run with FORCE=1 to overwrite." >&2
+        exit 1
+    fi
     echo "Pushing installer image to registry..."
     loaded=$(tar -xOf "$INSTALLER_FILE" manifest.json |
         python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["RepoTags"][0])')
@@ -65,6 +70,7 @@ if [ -e "$INSTALLER_FILE" ]; then
     docker tag "$loaded" "$IMAGE_NAME"
 
     docker push "$IMAGE_NAME"
+    docker inspect --format='Pushed digest: {{index .RepoDigests 0}}' "$IMAGE_NAME"
     echo "Image available at: ${IMAGE_NAME}"
     echo "Usage:"
     echo "$ talosctl -n node_name upgrade -i ${IMAGE_NAME}"
