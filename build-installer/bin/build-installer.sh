@@ -6,9 +6,9 @@ set -euo pipefail
 TALOS_VERSION=${1:-"v1.13.12"}
 REGISTRY="cr.v.zyxmasta.net"
 REPOSITORY="talos/pve-iris"
-INSTALLER_FILE="/tmp/out/installer-amd64.tar"
+OUT_DIR="${OUT_DIR:-/tmp/out}"
+INSTALLER_FILE="${OUT_DIR}/installer-amd64.tar"
 IMAGE_NAME="${REGISTRY}/${REPOSITORY}:${TALOS_VERSION}"
-IMAGE_BASE="ghcr.io/siderolabs/installer-base:${TALOS_VERSION}"
 
 EXTENSIONS=(
     "ghcr.io/siderolabs/util-linux-tools:2.42.2"
@@ -21,8 +21,12 @@ EXTENSIONS=(
 
 echo "Building installer image for ${TALOS_VERSION}..."
 
+mkdir -p "$OUT_DIR"
+# Previous runs leave a root-owned tar behind; clean it from a root
+# container instead of requiring sudo on the host
 if [ -e "$INSTALLER_FILE" ]; then
-    sudo rm -f "$INSTALLER_FILE"
+    docker run --rm -v "${OUT_DIR}:/out" alpine:3.20 \
+        rm -f "/out/$(basename "$INSTALLER_FILE")"
 fi
 
 imager_args=(installer --platform nocloud)
@@ -30,14 +34,17 @@ for ext in "${EXTENSIONS[@]}"; do
     imager_args+=(--system-extension-image "$ext")
 done
 
-docker run --rm -t -v /tmp/out:/out \
+docker run --rm -t -v "${OUT_DIR}:/out" \
     "ghcr.io/siderolabs/imager:${TALOS_VERSION}" \
     "${imager_args[@]}"
 
 if [ -e "$INSTALLER_FILE" ]; then
     echo "Pushing installer image to registry..."
+    loaded=$(tar -xOf "$INSTALLER_FILE" manifest.json |
+        python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["RepoTags"][0])')
+    echo "Loaded image tag in tar: ${loaded}"
     docker load -i "$INSTALLER_FILE"
-    docker tag "$IMAGE_BASE" "$IMAGE_NAME"
+    docker tag "$loaded" "$IMAGE_NAME"
 
     docker push "$IMAGE_NAME"
     echo "Image available at: ${IMAGE_NAME}"
