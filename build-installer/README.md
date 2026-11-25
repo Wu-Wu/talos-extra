@@ -1,68 +1,64 @@
 # Build Talos Linux installer image
 
+Builds a `nocloud` Talos installer image with the system extensions listed
+in `bin/build-installer.sh` (util-linux-tools, iscsi-tools, qemu-guest-agent
+and the custom meminfo-service) and pushes it to the private registry as
+`cr.v.zyxmasta.net/talos/pve-iris:<VERSION>`.
+
 ## Prerequisites
 
-- Private Docker Registry at `$REGISTRY` exists;
-- Registry allows anonymous push or user authenticated with `docker login` before run this build script;
-- Current user has `sudo` privileges;
+- Docker daemon running (the imager and extension images are pulled on
+  demand);
+- for the push step: `docker login cr.v.zyxmasta.net` first (or anonymous
+  push allowed); skip pushing entirely with `--no-push`;
+- no sudo required; the build runs on both Linux and macOS (amd64 builds on
+  Apple Silicon run the amd64 imager under emulation).
 
-
-## Run script
-
-```bash
-bin/build-installer.sh
-```
-
-or
+## Usage
 
 ```bash
-bin/build-installer.sh v1.13.5
+bin/build-installer.sh                  # build v1.13.12 and push
+bin/build-installer.sh v1.13.12         # explicit Talos version
+bin/build-installer.sh --no-push        # build only, do not touch the registry
+bin/build-installer.sh --arch arm64     # arm64 installer
+bin/build-installer.sh --help           # all flags
 ```
 
-## Script output
+Flags: `--arch amd64|arm64`, `--no-push`, `--force` (overwrite an existing
+target tag), `--out-dir DIR` (default `/tmp/out`), `-h/--help`.
+`REGISTRY` and `REPOSITORY` can be overridden via environment.
+Pushing to an existing tag is refused unless `--force` is given.
 
-```shell
-Building Talos installer image for v1.13.5...
-skipped pulling overlay (no overlay)
-profile ready:
-arch: amd64
-platform: nocloud
-secureboot: false
-name: Talos
-version: v1.13.5
-input:
-  kernel:
-    path: /usr/install/amd64/vmlinuz
-  initramfs:
-    path: /usr/install/amd64/initramfs.xz
-  sdStub:
-    path: /usr/install/amd64/systemd-stub.efi
-  sdBoot:
-    path: /usr/install/amd64/systemd-boot.efi
-  baseInstaller:
-    imageRef: ghcr.io/siderolabs/installer-base:v1.13.5
-  systemExtensions:
-    - imageRef: ghcr.io/siderolabs/util-linux-tools:2.42.0
-    - imageRef: ghcr.io/siderolabs/iscsi-tools:v0.2.0
-    - imageRef: ghcr.io/siderolabs/qemu-guest-agent:11.0.0
-    - imageRef: cr.v.zyxmasta.net/talos/meminfo-service:v0.1.2
-output:
-  kind: installer
-  outFormat: raw
-initramfs ready
-kernel command line: talos.platform=nocloud console=tty1 console=ttyS0 net.ifnames=0 init_on_alloc=1 slab_nomerge pti=on consoleblank=0 nvme_core.io_timeout=4294967295 printk.devkmsg=on selinux=1 module.sig_enforce=1 proc_mem.force_override=never
-UKI ready
+## Updating versions
+
+- Talos version: pass it as the script argument; pick the newest release from
+  <https://github.com/siderolabs/talos/releases>.
+- Extensions: edit the `EXTENSIONS` array. Versions must match the
+  `extensions` tag of the same Talos release
+  (<https://github.com/siderolabs/extensions>): e.g. `util-linux-tools` from
+  the top-level `Pkgfile`, `qemu-guest-agent` from `guest-agents/vars.yaml`,
+  iscsi-tools from `storage/iscsi-tools/vars.yaml`.
+
+## Example output
+
+```text
+$ bin/build-installer.sh
+Building installer image cr.v.zyxmasta.net/talos/pve-iris:v1.13.12 (arch: amd64)...
+...
+    NAME               VERSION   AUTHOR
+    util-linux-tools   2.42.2    Sidero Labs
+    iscsi-tools        v0.2.0    Sidero Labs
+    qemu-guest-agent   11.0.2    Markus Reiter
+    meminfo-service    v0.1.4    Wu-Wu
+...
 installer container image ready
 output asset path: /out/installer-amd64.tar
-Pushing Talos installer image to registry...
-490ea03d7019: Loading layer [==================================================>]  28.35MB/28.35MB
-6cd40686f96f: Loading layer [==================================================>]  111.9MB/111.9MB
-Loaded image: ghcr.io/siderolabs/installer-base:v1.13.5
-The push refers to repository [cr.v.zyxmasta.net/talos/pve-iris]
-6cd40686f96f: Pushed
-490ea03d7019: Pushed
-v1.13.2: digest: sha256:f3e719f8e5a912562d662d61aa9a71641b9534bb6a7946fd8ed894c4190a0173 size: 741
-Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.5
+Installer tar ready: /tmp/out/installer-amd64.tar
+Pushing installer image to registry...
+Loaded image tag in tar: ghcr.io/siderolabs/installer-base:v1.13.12
+...
+Pushed digest: cr.v.zyxmasta.net/talos/pve-iris@sha256:...
+Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.12
 Usage:
-$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.5
+$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.12
 ```
