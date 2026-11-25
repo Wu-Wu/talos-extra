@@ -21,6 +21,24 @@ EXTENSIONS=(
 
 echo "Building installer image for ${TALOS_VERSION}..."
 
+# --- preflight: fail before the multi-gigabyte pull ---
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: docker daemon is not available" >&2
+    exit 1
+fi
+
+if ! [[ "$TALOS_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "ERROR: version '${TALOS_VERSION}' does not match vX.Y.Z" >&2
+    exit 1
+fi
+
+for image in "ghcr.io/siderolabs/imager:${TALOS_VERSION}" "${EXTENSIONS[@]}"; do
+    if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+        echo "ERROR: image not found or not pullable: $image" >&2
+        exit 1
+    fi
+done
+
 mkdir -p "$OUT_DIR"
 # Previous runs leave a root-owned tar behind; clean it from a root
 # container instead of requiring sudo on the host
