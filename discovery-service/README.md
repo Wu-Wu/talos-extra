@@ -14,7 +14,7 @@ Create `compose.yml` file with contents:
 ```yaml
 services:
   discovery:
-    image: ghcr.io/siderolabs/discovery-service:v1.0.17
+    image: ghcr.io/siderolabs/discovery-service:v1.1.3
     container_name: discovery
     hostname: discovery
     command:
@@ -64,8 +64,8 @@ underscores_in_headers on;
 
 location / {
     client_body_timeout 3600s;
-    grpc_read_timeout 3600s;
-    grpc_send_timeout 3600s;
+    grpc_read_timeout 7d;
+    grpc_send_timeout 7d;
     grpc_socket_keepalive on;
     grpc_set_header X-Real-IP $remote_addr;
 
