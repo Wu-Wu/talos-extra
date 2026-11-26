@@ -39,14 +39,11 @@ jobs:
     strategy:
       fail-fast: false   # a failure in one arch must not cancel the other
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm   # native arm64, free for public repos
-            # test builds stay amd64-only; arm64 joins on release tags
-            if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: ${{ matrix.runner }}
+        # native runner per arch; arm64 joins on release tags only — an
+        # include-entry if: is ignored on a pure include matrix, so the arch
+        # list itself is computed from the event
+        arch: ${{ fromJSON((github.event_name == 'push' && github.ref_type == 'tag') && '["amd64", "arm64"]' || '["amd64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     name: build (${{ matrix.arch }})
     permissions:
       packages: write   # push arch images to ghcr under GITHUB_TOKEN
