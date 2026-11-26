@@ -12,13 +12,18 @@ OUT_DIR="${OUT_DIR:-/tmp/out}"
 REGISTRY="${PVTHUB_REGISTRY:-${REGISTRY:-cr.v.zyxmasta.net}}"
 REPOSITORY="${REPOSITORY:-talos/pve-iris}"
 
+# Custom meminfo-service extension: whitespace-separated candidate registries,
+# the first pullable one wins. The default is the internal registry interface
+# (local builds); CI passes ghcr first and the external interface last.
+MEMINFO_VERSION="v0.1.4"
+MEMINFO_SOURCES="${MEMINFO_SOURCES:-${REGISTRY}/talos/meminfo-service}"
+
 EXTENSIONS=(
     "ghcr.io/siderolabs/util-linux-tools:2.42.2"
     "ghcr.io/siderolabs/iscsi-tools:v0.2.0"
     "ghcr.io/siderolabs/qemu-guest-agent:11.0.2"
     # custom extensions
     # "${REGISTRY}/talos/core-utils:9.11.0"
-    "${REGISTRY}/talos/meminfo-service:v0.1.4"
 )
 
 usage() {
@@ -38,7 +43,7 @@ Options:
   --out-dir DIR      Directory for the installer tar (default: /tmp/out)
   -h, --help         Show this help
 
-Environment overrides: PVTHUB_REGISTRY, REGISTRY, REPOSITORY
+Environment overrides: PVTHUB_REGISTRY, REGISTRY, REPOSITORY, MEMINFO_SOURCES
 EOF
 }
 
@@ -113,6 +118,22 @@ for image in "ghcr.io/siderolabs/imager:${TALOS_VERSION}" "${EXTENSIONS[@]}"; do
     fi
 done
 
+# --- pick the meminfo-service source: the first pullable candidate wins ---
+read -ra meminfo_sources <<< "$MEMINFO_SOURCES"
+MEMINFO_IMAGE=""
+for src in "${meminfo_sources[@]}"; do
+    if docker manifest inspect "${src}:${MEMINFO_VERSION}" >/dev/null 2>&1; then
+        MEMINFO_IMAGE="${src}:${MEMINFO_VERSION}"
+        echo "meminfo-service extension source: ${MEMINFO_IMAGE}"
+        break
+    fi
+    echo "meminfo-service not pullable from ${src}, trying the next source..." >&2
+done
+if [ -z "$MEMINFO_IMAGE" ]; then
+    echo "ERROR: meminfo-service:${MEMINFO_VERSION} not pullable from: ${MEMINFO_SOURCES}" >&2
+    exit 1
+fi
+
 if [ "$PUSH" = "1" ] && docker manifest inspect "$IMAGE_NAME" >/dev/null 2>&1 \
         && [ "${FORCE:-0}" != "1" ]; then
     echo "ERROR: ${IMAGE_NAME} already exists in ${REGISTRY}." >&2
@@ -132,6 +153,7 @@ imager_args=(installer --platform nocloud --arch "$ARCH")
 for ext in "${EXTENSIONS[@]}"; do
     imager_args+=(--system-extension-image "$ext")
 done
+imager_args+=(--system-extension-image "$MEMINFO_IMAGE")
 
 docker run --rm -t --platform "linux/${ARCH}" -v "${OUT_DIR}:/out" \
     "ghcr.io/siderolabs/imager:${TALOS_VERSION}" \

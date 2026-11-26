@@ -27,7 +27,9 @@ bin/build-installer.sh --help           # all flags
 Flags: `--arch amd64|arm64`, `--no-push`, `--force` (overwrite an existing
 target tag), `--out-dir DIR` (default `/tmp/out`), `-h/--help`.
 `PVTHUB_REGISTRY` (the externally reachable registry interface, used by CI),
-`REGISTRY` and `REPOSITORY` can be overridden via environment.
+`REGISTRY`, `REPOSITORY` and `MEMINFO_SOURCES` (whitespace-separated
+meminfo-service extension registries, the first pullable one wins; default
+`${REGISTRY}/talos/meminfo-service`) can be overridden via environment.
 Pushing to an existing tag is refused unless `--force` is given.
 
 ## Updating versions
