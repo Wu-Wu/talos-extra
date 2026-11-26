@@ -17,8 +17,8 @@ and the custom meminfo-service) and pushes it to the private registry as
 ## Usage
 
 ```bash
-bin/build-installer.sh                  # build v1.13.12 and push
-bin/build-installer.sh v1.13.12         # explicit Talos version
+bin/build-installer.sh                  # build v1.13.13 and push
+bin/build-installer.sh v1.13.13         # explicit Talos version
 bin/build-installer.sh --no-push        # build only, do not touch the registry
 bin/build-installer.sh --arch arm64     # arm64 installer
 bin/build-installer.sh --help           # all flags
@@ -46,7 +46,7 @@ Pushing to an existing tag is refused unless `--force` is given.
 
 ```text
 $ bin/build-installer.sh
-Building installer image cr.v.zyxmasta.net/talos/pve-iris:v1.13.12 (arch: amd64)...
+Building installer image cr.v.zyxmasta.net/talos/pve-iris:v1.13.13 (arch: amd64)...
 ...
     NAME               VERSION   AUTHOR
     util-linux-tools   2.42.2    Sidero Labs
@@ -58,10 +58,10 @@ installer container image ready
 output asset path: /out/installer-amd64.tar
 Installer tar ready: /tmp/out/installer-amd64.tar
 Pushing installer image to registry...
-Loaded image tag in tar: ghcr.io/siderolabs/installer-base:v1.13.12
+Loaded image tag in tar: ghcr.io/siderolabs/installer-base:v1.13.13
 ...
 Pushed digest: cr.v.zyxmasta.net/talos/pve-iris@sha256:...
-Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.12
+Image available at: cr.v.zyxmasta.net/talos/pve-iris:v1.13.13
 Usage:
-$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.12
+$ talosctl -n node_name upgrade -i cr.v.zyxmasta.net/talos/pve-iris:v1.13.13
 ```
