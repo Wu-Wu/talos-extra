@@ -1,15 +1,17 @@
 name: Build installer
 
 # Test builds (amd64, never pushed to any registry): pull_request and
-# workflow_dispatch. Release: git tag push vX.Y.Z -> installer image
-# vX.Y.Z and latest in ghcr.io/wu-wu/pve-iris (pushed with the built-in
-# GITHUB_TOKEN, no secrets), a GitHub release with the ghcr addresses.
+# workflow_dispatch. Release: git tag push vX.Y.Z -> native per-arch installer
+# builds pushed to ghcr as <tag>-<arch>, then a multi-arch manifest <tag>
+# (+ latest) in ghcr.io/wu-wu/pve-iris (pushed with the built-in GITHUB_TOKEN,
+# no secrets) and a GitHub release with the ghcr addresses.
 # Optional private registry (docker_auth): repository variables
 # PVTHUB_HOSTNAME/PVTHUB_USERNAME + secret PVTHUB_PASSWORD. It is used for
-# pulling the meminfo-service extension image and, on release tags only, for
-# pushing the release tag; test builds and :latest are never pushed there.
-# The private registry is best-effort and deliberately absent from the
-# release notes; empty PVTHUB_HOSTNAME -> all private steps are skipped.
+# pulling the meminfo-service extension image (PVTHUB_REGISTRY) and, on
+# release tags only, for pushing the release manifest; test builds and
+# :latest are never pushed there. The private registry is best-effort and
+# deliberately absent from the release notes; empty PVTHUB_HOSTNAME -> all
+# private steps are skipped.
 
 on:
   push:
@@ -28,16 +30,26 @@ concurrency:
 
 env:
   IMAGE_GHCR: ghcr.io/wu-wu/pve-iris
-  # empty PVTHUB_HOSTNAME -> empty string -> private push step is skipped
+  # empty PVTHUB_HOSTNAME -> empty string -> private steps are skipped
   IMAGE_PRIVATE: ${{ vars.PVTHUB_HOSTNAME != '' && format('{0}/talos/pve-iris', vars.PVTHUB_HOSTNAME) || '' }}
   OUT_DIR: /tmp/out
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    name: build (amd64)
+    strategy:
+      fail-fast: false   # a failure in one arch must not cancel the other
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm   # native arm64, free for public repos
+            # test builds stay amd64-only; arm64 joins on release tags
+            if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ${{ matrix.runner }}
+    name: build (${{ matrix.arch }})
     permissions:
-      packages: write   # push the release tag to ghcr under GITHUB_TOKEN
+      packages: write   # push arch images to ghcr under GITHUB_TOKEN
     steps:
       - uses: actions/checkout@v7
 
@@ -58,7 +70,7 @@ jobs:
           username: ${{ vars.PVTHUB_USERNAME }}
           password: ${{ secrets.PVTHUB_PASSWORD }}
 
-      - name: Build installer (amd64, no push)
+      - name: Build installer (${{ matrix.arch }}, no push)
         env:
           # pull extensions through the externally reachable registry interface
           PVTHUB_REGISTRY: ${{ vars.PVTHUB_HOSTNAME }}
@@ -66,62 +78,88 @@ jobs:
           set -euo pipefail
           # release tag builds the tagged Talos version; PR/dispatch builds
           # the default version baked into the script
-          args=(--arch amd64 --no-push --out-dir "$OUT_DIR")
+          args=(--arch "${{ matrix.arch }}" --no-push --out-dir "$OUT_DIR")
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             args=("$GITHUB_REF_NAME" "${args[@]}")
           fi
           ./build-installer/bin/build-installer.sh "${args[@]}"
         shell: bash
 
-      - name: Push installer image to ghcr.io
-        id: ghcr
+      - name: Push arch image to ghcr.io
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           set -euo pipefail
-          loaded=$(docker load -i "$OUT_DIR/installer-amd64.tar" | sed -n 's/^Loaded image: //p')
+          loaded=$(docker load -i "$OUT_DIR/installer-${{ matrix.arch }}.tar" | sed -n 's/^Loaded image: //p')
           if [ -z "$loaded" ]; then
             echo "ERROR: could not determine the loaded image tag" >&2
             exit 1
           fi
-          docker tag "$loaded" "$IMAGE_GHCR:$GITHUB_REF_NAME"
-          docker tag "$loaded" "$IMAGE_GHCR:latest"
-          docker push "$IMAGE_GHCR:$GITHUB_REF_NAME"
-          docker push "$IMAGE_GHCR:latest"
-          echo "loaded=$loaded" >> "$GITHUB_OUTPUT"
+          docker tag "$loaded" "$IMAGE_GHCR:$GITHUB_REF_NAME-${{ matrix.arch }}"
+          docker push "$IMAGE_GHCR:$GITHUB_REF_NAME-${{ matrix.arch }}"
+        shell: bash
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to private registry (best-effort)
+        if: vars.PVTHUB_HOSTNAME != ''
+        continue-on-error: true
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.PVTHUB_HOSTNAME }}
+          username: ${{ vars.PVTHUB_USERNAME }}
+          password: ${{ secrets.PVTHUB_PASSWORD }}
+
+      - name: Compose multi-arch manifest
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "$IMAGE_GHCR:$GITHUB_REF_NAME" \
+            -t "$IMAGE_GHCR:latest" \
+            "$IMAGE_GHCR:$GITHUB_REF_NAME-amd64" "$IMAGE_GHCR:$GITHUB_REF_NAME-arm64"
         shell: bash
 
       - name: Step summary
-        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           set -euo pipefail
           {
             echo "## Images"
-            echo "- ghcr: \`$IMAGE_GHCR:$GITHUB_REF_NAME\` (from \`$loaded\`)"
+            echo "- ghcr: \`$IMAGE_GHCR:$GITHUB_REF_NAME\` (amd64+arm64)"
             echo '```'
             docker buildx imagetools inspect "$IMAGE_GHCR:$GITHUB_REF_NAME"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-        env:
-          loaded: ${{ steps.ghcr.outputs.loaded }}
         shell: bash
 
-      - name: Push installer image to private registry (best-effort)
-        if: github.event_name == 'push' && github.ref_type == 'tag' && vars.PVTHUB_HOSTNAME != ''
+      - name: Publish private registry manifest (best-effort)
+        if: vars.PVTHUB_HOSTNAME != ''
         continue-on-error: true   # runs after the summary; a private registry
                                   # failure must not cut it or fail the pipeline
         run: |
           set -euo pipefail
-          # release tags only: no :latest, no test builds in the private registry
-          docker tag "$loaded" "$IMAGE_PRIVATE:$GITHUB_REF_NAME"
-          if ! docker push "$IMAGE_PRIVATE:$GITHUB_REF_NAME"; then
-            echo "::warning::private registry push failed for $GITHUB_REF_NAME"
+          # release tags only: no :latest, no test builds in the private
+          # registry; sources are the ghcr arch tags, blobs are copied
+          # cross-registry
+          if ! docker buildx imagetools create \
+              -t "$IMAGE_PRIVATE:$GITHUB_REF_NAME" \
+              "$IMAGE_GHCR:$GITHUB_REF_NAME-amd64" "$IMAGE_GHCR:$GITHUB_REF_NAME-arm64"; then
+            echo "::warning::private registry manifest push failed for $GITHUB_REF_NAME"
           fi
-        env:
-          loaded: ${{ steps.ghcr.outputs.loaded }}
         shell: bash
 
   release:
-    needs: build
+    needs: publish
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
@@ -136,8 +174,8 @@ jobs:
           # are escaped, otherwise bash runs them as command substitution
           cat > notes.md <<EOF
           Talos Linux installer image \`${GITHUB_REF_NAME}\` - nocloud platform,
-          amd64, with util-linux-tools, iscsi-tools, qemu-guest-agent and
-          meminfo-service system extensions.
+          multi-arch amd64+arm64, with util-linux-tools, iscsi-tools,
+          qemu-guest-agent and meminfo-service system extensions.
 
           Container images for this release:
           - \`$IMAGE_GHCR:$GITHUB_REF_NAME\`
