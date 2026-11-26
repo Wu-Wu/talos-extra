@@ -1,0 +1,149 @@
+name: Build installer
+
+# Test builds (amd64, never pushed to any registry): pull_request and
+# workflow_dispatch. Release: git tag push vX.Y.Z -> installer image
+# vX.Y.Z and latest in ghcr.io/wu-wu/pve-iris (pushed with the built-in
+# GITHUB_TOKEN, no secrets), a GitHub release with the ghcr addresses.
+# Optional private registry (docker_auth): repository variables
+# PVTHUB_HOSTNAME/PVTHUB_USERNAME + secret PVTHUB_PASSWORD. It is used for
+# pulling the meminfo-service extension image and, on release tags only, for
+# pushing the release tag; test builds and :latest are never pushed there.
+# The private registry is best-effort and deliberately absent from the
+# release notes; empty PVTHUB_HOSTNAME -> all private steps are skipped.
+
+on:
+  push:
+    tags:
+      - v*
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_GHCR: ghcr.io/wu-wu/pve-iris
+  # empty PVTHUB_HOSTNAME -> empty string -> private push step is skipped
+  IMAGE_PRIVATE: ${{ vars.PVTHUB_HOSTNAME != '' && format('{0}/talos/pve-iris', vars.PVTHUB_HOSTNAME) || '' }}
+  OUT_DIR: /tmp/out
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    name: build (amd64)
+    permissions:
+      packages: write   # push the release tag to ghcr under GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Login to ghcr.io
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to private registry (extension pull, best-effort)
+        if: vars.PVTHUB_HOSTNAME != ''
+        continue-on-error: true
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.PVTHUB_HOSTNAME }}
+          username: ${{ vars.PVTHUB_USERNAME }}
+          password: ${{ secrets.PVTHUB_PASSWORD }}
+
+      - name: Build installer (amd64, no push)
+        run: |
+          set -euo pipefail
+          # release tag builds the tagged Talos version; PR/dispatch builds
+          # the default version baked into the script
+          args=(--arch amd64 --no-push --out-dir "$OUT_DIR")
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            args=("$GITHUB_REF_NAME" "${args[@]}")
+          fi
+          ./build-installer/bin/build-installer.sh "${args[@]}"
+        shell: bash
+
+      - name: Push installer image to ghcr.io
+        id: ghcr
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          loaded=$(docker load -i "$OUT_DIR/installer-amd64.tar" | sed -n 's/^Loaded image: //p')
+          if [ -z "$loaded" ]; then
+            echo "ERROR: could not determine the loaded image tag" >&2
+            exit 1
+          fi
+          docker tag "$loaded" "$IMAGE_GHCR:$GITHUB_REF_NAME"
+          docker tag "$loaded" "$IMAGE_GHCR:latest"
+          docker push "$IMAGE_GHCR:$GITHUB_REF_NAME"
+          docker push "$IMAGE_GHCR:latest"
+          echo "loaded=$loaded" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Step summary
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          {
+            echo "## Images"
+            echo "- ghcr: \`$IMAGE_GHCR:$GITHUB_REF_NAME\` (from \`$loaded\`)"
+            echo '```'
+            docker buildx imagetools inspect "$IMAGE_GHCR:$GITHUB_REF_NAME"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          loaded: ${{ steps.ghcr.outputs.loaded }}
+        shell: bash
+
+      - name: Push installer image to private registry (best-effort)
+        if: github.event_name == 'push' && github.ref_type == 'tag' && vars.PVTHUB_HOSTNAME != ''
+        continue-on-error: true   # runs after the summary; a private registry
+                                  # failure must not cut it or fail the pipeline
+        run: |
+          set -euo pipefail
+          # release tags only: no :latest, no test builds in the private registry
+          docker tag "$loaded" "$IMAGE_PRIVATE:$GITHUB_REF_NAME"
+          if ! docker push "$IMAGE_PRIVATE:$GITHUB_REF_NAME"; then
+            echo "::warning::private registry push failed for $GITHUB_REF_NAME"
+          fi
+        env:
+          loaded: ${{ steps.ghcr.outputs.loaded }}
+        shell: bash
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # heredoc without quotes so $-vars expand; the markdown backticks
+          # are escaped, otherwise bash runs them as command substitution
+          cat > notes.md <<EOF
+          Talos Linux installer image \`${GITHUB_REF_NAME}\` - nocloud platform,
+          amd64, with util-linux-tools, iscsi-tools, qemu-guest-agent and
+          meminfo-service system extensions.
+
+          Container images for this release:
+          - \`$IMAGE_GHCR:$GITHUB_REF_NAME\`
+          - \`$IMAGE_GHCR:latest\`
+          EOF
+          # no checkout in this job: gh needs an explicit -R without git context
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md
+          fi
+        shell: bash
