@@ -59,6 +59,9 @@ jobs:
           password: ${{ secrets.PVTHUB_PASSWORD }}
 
       - name: Build installer (amd64, no push)
+        env:
+          # pull extensions through the externally reachable registry interface
+          PVTHUB_REGISTRY: ${{ vars.PVTHUB_HOSTNAME }}
         run: |
           set -euo pipefail
           # release tag builds the tagged Talos version; PR/dispatch builds

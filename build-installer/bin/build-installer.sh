@@ -7,7 +7,9 @@ TALOS_VERSION=""
 ARCH="amd64"
 PUSH=1
 OUT_DIR="${OUT_DIR:-/tmp/out}"
-REGISTRY="${REGISTRY:-cr.v.zyxmasta.net}"
+# CI runners pass PVTHUB_REGISTRY (the externally reachable registry
+# interface); REGISTRY stays the plain override, the internal host the default
+REGISTRY="${PVTHUB_REGISTRY:-${REGISTRY:-cr.v.zyxmasta.net}}"
 REPOSITORY="${REPOSITORY:-talos/pve-iris}"
 
 EXTENSIONS=(
@@ -36,7 +38,7 @@ Options:
   --out-dir DIR      Directory for the installer tar (default: /tmp/out)
   -h, --help         Show this help
 
-Environment overrides: REGISTRY, REPOSITORY
+Environment overrides: PVTHUB_REGISTRY, REGISTRY, REPOSITORY
 EOF
 }
 
