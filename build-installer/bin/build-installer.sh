@@ -34,7 +34,7 @@ Build a Talos installer image (nocloud platform) with the system
 extensions listed in the script, then push it to the registry.
 
 Arguments:
-  VERSION            Talos version to build (default: v1.13.12)
+  VERSION            Talos version to build (default: v1.13.13)
 
 Options:
   --arch ARCH        Target architecture: amd64|arm64 (default: amd64)
@@ -89,7 +89,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-TALOS_VERSION="${TALOS_VERSION:-v1.13.12}"
+TALOS_VERSION="${TALOS_VERSION:-v1.13.13}"
 INSTALLER_FILE="${OUT_DIR}/installer-${ARCH}.tar"
 IMAGE_NAME="${REGISTRY}/${REPOSITORY}:${TALOS_VERSION}"
 
